@@ -60,7 +60,7 @@ def patch_rendering():
                         subpath_ends_list[pool_idx],
                     )
                     pool_idx += 1
-                self.display_vectorized(vm, self.get_cairo_context(pixel_array))
+                self.display_vectorized(vm, self.get_skia_canvas(pixel_array))
                 if hasattr(vm, '_precomputed_subpaths'):
                     del vm._precomputed_subpaths
         except Exception:
