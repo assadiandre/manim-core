@@ -98,7 +98,7 @@ def main():
     bench("Python np.dot projection", lambda: python_project(all_pts.copy(), fc, rot, fd, zoom))
 
     print(f"\n--- Shading ({n_faces} objects) ---")
-    bench("Rust shade_all_objects", lambda: shade_all_objects(pool, light, 0.2, 0.7))
+    bench("Rust shade_all_objects", lambda: shade_all_objects(pool, light))
 
     print(f"\n--- Z-Sort ({n_faces} objects) ---")
     bench("Rust z_sort", lambda: z_sort(pool, rot))
@@ -127,7 +127,7 @@ def main():
 
     def full_frame():
         project_all_points(pool, fc, rot, fd, zoom)
-        shade_all_objects(pool, light, 0.2, 0.7)
+        shade_all_objects(pool, light)
         z_sort(pool, rot)
 
     t0 = time.perf_counter()
@@ -138,7 +138,7 @@ def main():
 
     def full_frame_with_interp():
         project_all_points(pool, fc, rot, fd, zoom)
-        shade_all_objects(pool, light, 0.2, 0.7)
+        shade_all_objects(pool, light)
         z_sort(pool, rot)
         interpolate_pools(target, start, end, 0.5, 0)
 

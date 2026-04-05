@@ -23,18 +23,21 @@ def patch_vmobject():
         pool = get_scene_pool()
         pm = get_pool_manager()
         if pool is not None and pm is not None and hasattr(self, '_pool_id'):
-            try:
-                family_ids = get_family_for(pool, self._pool_id)
-                result = []
-                for pid in family_ids:
-                    pid = int(pid)
-                    obj = pm._id_to_obj.get(pid)
-                    if obj is not None:
-                        result.append(obj)
-                if result:
-                    return result
-            except Exception:
-                pass
+            # Only use pool path if self is the actual registered object,
+            # not a copy that inherited _pool_id
+            if pm._id_to_obj.get(self._pool_id) is self:
+                try:
+                    family_ids = get_family_for(pool, self._pool_id)
+                    result = []
+                    for pid in family_ids:
+                        pid = int(pid)
+                        obj = pm._id_to_obj.get(pid)
+                        if obj is not None:
+                            result.append(obj)
+                    if result:
+                        return result
+                except Exception:
+                    pass
         return _orig_get_family(self, recurse)
 
     def _patched_extract_family(mobjects, use_z_index=False, only_those_with_points=False):

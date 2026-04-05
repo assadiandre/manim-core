@@ -11,9 +11,15 @@ def apply_all_patches():
     from manim_core.patches.vmobject_patch import patch_vmobject
     from manim_core.patches.hashing_patch import patch_hashing
     from manim_core.patches.animation_patch import patch_animation
+    from manim_core.patches.shading_patch import patch_shading
+    from manim_core.patches.rendering_patch import patch_rendering
+    from manim_core.patches.interpolation_patch import patch_interpolation
 
     patch_scene()
     patch_three_d_camera()
     patch_vmobject()
     patch_hashing()
     patch_animation()
+    patch_shading()
+    patch_rendering()
+    patch_interpolation()

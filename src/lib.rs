@@ -30,6 +30,7 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(interpolation::clone_pool, m)?)?;
     m.add_function(wrap_pyfunction!(interpolation::interpolate_pools, m)?)?;
     m.add_function(wrap_pyfunction!(interpolation::interpolate_objects, m)?)?;
+    m.add_function(wrap_pyfunction!(interpolation::interpolate_object_attrs, m)?)?;
 
     // Phase 4: Rendering
     m.add_function(wrap_pyfunction!(rendering::prepare_render_data, m)?)?;

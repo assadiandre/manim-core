@@ -9,6 +9,7 @@ import numpy as np
 
 from manim_core._rust import (
     project_all_points,
+    shade_all_objects,
     z_sort,
 )
 from manim_core.pool_manager import get_scene_pool, get_pool_manager
@@ -101,9 +102,34 @@ def patch_three_d_camera():
             rot = np.ascontiguousarray(self.get_rotation_matrix(), dtype=np.float64)
             fd = float(self.get_focal_distance())
             zoom = float(self.get_zoom())
-            self._rust_proj_cache = np.array(project_all_points(pool, fc, rot, fd, zoom))
+            exp_proj = bool(getattr(self, 'exponential_projection', True))
+            self._rust_proj_cache = np.array(project_all_points(pool, fc, rot, fd, zoom, exp_proj))
         except Exception:
             self._rust_proj_cache = None
+
+    def _batch_shade(self):
+        """Pre-compute shading for all pool objects this frame."""
+        pool = get_scene_pool()
+        if pool is None or pool.len() == 0:
+            self._rust_shaded_fills = None
+            self._rust_shaded_strokes = None
+            self._rust_shaded_fill_offsets = None
+            self._rust_shaded_stroke_offsets = None
+            return
+        try:
+            light_pos = np.ascontiguousarray(
+                self.light_source.points[0], dtype=np.float64
+            )
+            fills, strokes, fill_offsets, stroke_offsets = shade_all_objects(pool, light_pos)
+            self._rust_shaded_fills = np.array(fills)
+            self._rust_shaded_strokes = np.array(strokes)
+            self._rust_shaded_fill_offsets = np.array(fill_offsets)
+            self._rust_shaded_stroke_offsets = np.array(stroke_offsets)
+        except Exception:
+            self._rust_shaded_fills = None
+            self._rust_shaded_strokes = None
+            self._rust_shaded_fill_offsets = None
+            self._rust_shaded_stroke_offsets = None
 
     # Patch capture_mobjects to trigger batch precompute before each frame
     from manim.camera.camera import Camera
@@ -111,10 +137,15 @@ def patch_three_d_camera():
 
     def _patched_capture(self, mobjects, **kwargs):
         if isinstance(self, ThreeDCamera):
+            pm = get_pool_manager()
+            if pm is not None:
+                pm.sync_all()
             _batch_precompute(self)
+            _batch_shade(self)
         return _orig_capture(self, mobjects, **kwargs)
 
     ThreeDCamera.get_mobjects_to_display = _patched_get_mobjects_to_display
     ThreeDCamera.transform_points_pre_display = _patched_transform_points_pre_display
     ThreeDCamera._batch_precompute = _batch_precompute
+    ThreeDCamera._batch_shade = _batch_shade
     Camera.capture_mobjects = _patched_capture

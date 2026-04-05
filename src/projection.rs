@@ -13,10 +13,17 @@ use crate::mesh_pool::MeshPool;
 /// Algorithm (from three_d_camera.py):
 ///   1. Subtract frame_center from all points
 ///   2. Multiply by rotation_matrix (3x3)
-///   3. Apply perspective: x' = x * fd/(fd - z), y' = y * fd/(fd - z)
+///   3. Apply perspective:
+///      - exponential mode (ThreeDScene default):
+///          z >= 0: factor = exp(z / fd)
+///          z <  0: factor = fd / (fd - z)
+///      - standard mode:
+///          factor = fd / (fd - z)
+///          factor = 1e6 when (fd - z) < 0
 ///   4. Scale by zoom factor
 ///   5. Keep z for z-sorting
 #[pyfunction]
+#[pyo3(signature = (pool, frame_center, rotation_matrix, focal_distance, zoom, exponential_projection=true))]
 pub fn project_all_points<'py>(
     py: Python<'py>,
     pool: &MeshPool,
@@ -24,6 +31,7 @@ pub fn project_all_points<'py>(
     rotation_matrix: PyReadonlyArray2<f64>,
     focal_distance: f64,
     zoom: f64,
+    exponential_projection: bool,
 ) -> PyResult<Bound<'py, PyArray2<f64>>> {
     let fc = frame_center.as_array();
     let rot = rotation_matrix.as_array();
@@ -58,10 +66,26 @@ pub fn project_all_points<'py>(
         let rz = r20 * dx + r21 * dy + r22 * dz;
 
         if use_perspective {
-            let factor = if (focal_distance - rz).abs() > 1e-10 {
-                focal_distance / (focal_distance - rz)
+            let factor = if exponential_projection {
+                // manim's exponential mode: exp for z>=0, standard for z<0
+                if rz >= 0.0 {
+                    (rz / focal_distance).exp()
+                } else {
+                    let denom = focal_distance - rz;
+                    if denom.abs() > 1e-10 {
+                        focal_distance / denom
+                    } else {
+                        focal_distance / 1e-10
+                    }
+                }
             } else {
-                focal_distance / 1e-10
+                // Standard perspective: fd / (fd - z)
+                let denom = focal_distance - rz;
+                if denom > 0.0 {
+                    focal_distance / denom
+                } else {
+                    1e6
+                }
             };
             out[0] = rx * factor * zoom;
             out[1] = ry * factor * zoom;
@@ -84,6 +108,7 @@ pub fn project_all_points<'py>(
 
 /// Project points for a specific set of pool objects (by their IDs).
 #[pyfunction]
+#[pyo3(signature = (pool, object_ids, frame_center, rotation_matrix, focal_distance, zoom, exponential_projection=true))]
 pub fn project_points_for_objects<'py>(
     py: Python<'py>,
     pool: &MeshPool,
@@ -92,6 +117,7 @@ pub fn project_points_for_objects<'py>(
     rotation_matrix: PyReadonlyArray2<f64>,
     focal_distance: f64,
     zoom: f64,
+    exponential_projection: bool,
 ) -> PyResult<Bound<'py, PyArray2<f64>>> {
     let fc = frame_center.as_array();
     let rot = rotation_matrix.as_array();
@@ -135,11 +161,24 @@ pub fn project_points_for_objects<'py>(
             let rz = r20 * dx + r21 * dy + r22 * dz;
 
             if use_perspective {
-                let denom = focal_distance - rz;
-                let factor = if denom.abs() > 1e-10 {
-                    focal_distance / denom
+                let factor = if exponential_projection {
+                    if rz >= 0.0 {
+                        (rz / focal_distance).exp()
+                    } else {
+                        let denom = focal_distance - rz;
+                        if denom.abs() > 1e-10 {
+                            focal_distance / denom
+                        } else {
+                            focal_distance / 1e-10
+                        }
+                    }
                 } else {
-                    focal_distance / 1e-10
+                    let denom = focal_distance - rz;
+                    if denom > 0.0 {
+                        focal_distance / denom
+                    } else {
+                        1e6
+                    }
                 };
                 arr[[write_idx, 0]] = rx * factor * zoom;
                 arr[[write_idx, 1]] = ry * factor * zoom;

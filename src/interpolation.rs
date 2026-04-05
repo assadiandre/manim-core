@@ -142,6 +142,78 @@ pub fn interpolate_objects(
     Ok(())
 }
 
+/// Interpolate color/scalar attributes of target_id between source1_id and source2_id
+/// within the SAME pool. Points are NOT interpolated (path_func may be non-linear).
+#[pyfunction]
+pub fn interpolate_object_attrs(
+    pool: &mut MeshPool,
+    target_id: u32,
+    source1_id: u32,
+    source2_id: u32,
+    alpha: f64,
+) -> PyResult<()> {
+    let t = alpha;
+    let tidx = target_id as usize;
+    let s1idx = source1_id as usize;
+    let s2idx = source2_id as usize;
+
+    // Interpolate fill_rgbas
+    let t_fstart = pool.fill_rgba_offsets[tidx] as usize;
+    let t_fend = pool.fill_rgba_offsets[tidx + 1] as usize;
+    let s1_fstart = pool.fill_rgba_offsets[s1idx] as usize;
+    let s1_fend = pool.fill_rgba_offsets[s1idx + 1] as usize;
+    let s2_fstart = pool.fill_rgba_offsets[s2idx] as usize;
+    let s2_fend = pool.fill_rgba_offsets[s2idx + 1] as usize;
+    let fcount = (t_fend - t_fstart).min(s1_fend - s1_fstart).min(s2_fend - s2_fstart);
+    for i in 0..fcount {
+        for j in 0..4 {
+            pool.fill_rgbas[t_fstart + i][j] =
+                pool.fill_rgbas[s1_fstart + i][j] + t * (pool.fill_rgbas[s2_fstart + i][j] - pool.fill_rgbas[s1_fstart + i][j]);
+        }
+    }
+
+    // Interpolate stroke_rgbas
+    let t_sstart = pool.stroke_rgba_offsets[tidx] as usize;
+    let t_send = pool.stroke_rgba_offsets[tidx + 1] as usize;
+    let s1_sstart = pool.stroke_rgba_offsets[s1idx] as usize;
+    let s1_send = pool.stroke_rgba_offsets[s1idx + 1] as usize;
+    let s2_sstart = pool.stroke_rgba_offsets[s2idx] as usize;
+    let s2_send = pool.stroke_rgba_offsets[s2idx + 1] as usize;
+    let scount = (t_send - t_sstart).min(s1_send - s1_sstart).min(s2_send - s2_sstart);
+    for i in 0..scount {
+        for j in 0..4 {
+            pool.stroke_rgbas[t_sstart + i][j] =
+                pool.stroke_rgbas[s1_sstart + i][j] + t * (pool.stroke_rgbas[s2_sstart + i][j] - pool.stroke_rgbas[s1_sstart + i][j]);
+        }
+    }
+
+    // Interpolate bg_stroke_rgbas
+    let t_bstart = pool.bg_stroke_rgba_offsets[tidx] as usize;
+    let t_bend = pool.bg_stroke_rgba_offsets[tidx + 1] as usize;
+    let s1_bstart = pool.bg_stroke_rgba_offsets[s1idx] as usize;
+    let s1_bend = pool.bg_stroke_rgba_offsets[s1idx + 1] as usize;
+    let s2_bstart = pool.bg_stroke_rgba_offsets[s2idx] as usize;
+    let s2_bend = pool.bg_stroke_rgba_offsets[s2idx + 1] as usize;
+    let bcount = (t_bend - t_bstart).min(s1_bend - s1_bstart).min(s2_bend - s2_bstart);
+    for i in 0..bcount {
+        for j in 0..4 {
+            pool.bg_stroke_rgbas[t_bstart + i][j] =
+                pool.bg_stroke_rgbas[s1_bstart + i][j] + t * (pool.bg_stroke_rgbas[s2_bstart + i][j] - pool.bg_stroke_rgbas[s1_bstart + i][j]);
+        }
+    }
+
+    // Interpolate scalars
+    pool.stroke_widths[tidx] = pool.stroke_widths[s1idx] + t * (pool.stroke_widths[s2idx] - pool.stroke_widths[s1idx]);
+    pool.bg_stroke_widths[tidx] = pool.bg_stroke_widths[s1idx] + t * (pool.bg_stroke_widths[s2idx] - pool.bg_stroke_widths[s1idx]);
+    pool.sheen_factors[tidx] = pool.sheen_factors[s1idx] + t * (pool.sheen_factors[s2idx] - pool.sheen_factors[s1idx]);
+    for j in 0..3 {
+        pool.sheen_directions[tidx][j] =
+            pool.sheen_directions[s1idx][j] + t * (pool.sheen_directions[s2idx][j] - pool.sheen_directions[s1idx][j]);
+    }
+
+    Ok(())
+}
+
 #[inline]
 fn smooth(t: f64) -> f64 {
     let s = t.clamp(0.0, 1.0);

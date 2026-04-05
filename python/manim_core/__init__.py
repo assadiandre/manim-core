@@ -29,6 +29,7 @@ from manim_core._rust import (
     clone_pool,
     interpolate_pools,
     interpolate_objects,
+    interpolate_object_attrs,
     prepare_render_data,
     compute_visibility,
 )
@@ -67,6 +68,7 @@ __all__ = [
     "clone_pool",
     "interpolate_pools",
     "interpolate_objects",
+    "interpolate_object_attrs",
     "prepare_render_data",
     "compute_visibility",
 ]

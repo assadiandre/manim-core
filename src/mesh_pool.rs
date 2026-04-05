@@ -313,4 +313,93 @@ impl MeshPool {
     pub fn mark_family_dirty(&mut self) {
         self.family_order_dirty = true;
     }
+
+    /// Get fill RGBA range for an object: (start, end) into fill_rgbas.
+    pub fn fill_rgba_range(&self, pool_id: u32) -> (u32, u32) {
+        let idx = pool_id as usize;
+        (self.fill_rgba_offsets[idx], self.fill_rgba_offsets[idx + 1])
+    }
+
+    /// Get stroke RGBA range for an object: (start, end) into stroke_rgbas.
+    pub fn stroke_rgba_range(&self, pool_id: u32) -> (u32, u32) {
+        let idx = pool_id as usize;
+        (self.stroke_rgba_offsets[idx], self.stroke_rgba_offsets[idx + 1])
+    }
+
+    /// Get bg stroke RGBA range for an object: (start, end) into bg_stroke_rgbas.
+    pub fn bg_stroke_rgba_range(&self, pool_id: u32) -> (u32, u32) {
+        let idx = pool_id as usize;
+        (self.bg_stroke_rgba_offsets[idx], self.bg_stroke_rgba_offsets[idx + 1])
+    }
+
+    /// Get fill RGBAs for a specific object as numpy array.
+    pub fn get_fill_rgbas<'py>(&self, py: Python<'py>, pool_id: u32) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let idx = pool_id as usize;
+        let start = self.fill_rgba_offsets[idx] as usize;
+        let end = self.fill_rgba_offsets[idx + 1] as usize;
+        let n = end - start;
+        let mut arr = Array2::<f64>::zeros((n, 4));
+        for i in 0..n {
+            let c = &self.fill_rgbas[start + i];
+            arr[[i, 0]] = c[0];
+            arr[[i, 1]] = c[1];
+            arr[[i, 2]] = c[2];
+            arr[[i, 3]] = c[3];
+        }
+        Ok(arr.into_pyarray_bound(py))
+    }
+
+    /// Get stroke RGBAs for a specific object as numpy array.
+    pub fn get_stroke_rgbas<'py>(&self, py: Python<'py>, pool_id: u32) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let idx = pool_id as usize;
+        let start = self.stroke_rgba_offsets[idx] as usize;
+        let end = self.stroke_rgba_offsets[idx + 1] as usize;
+        let n = end - start;
+        let mut arr = Array2::<f64>::zeros((n, 4));
+        for i in 0..n {
+            let c = &self.stroke_rgbas[start + i];
+            arr[[i, 0]] = c[0];
+            arr[[i, 1]] = c[1];
+            arr[[i, 2]] = c[2];
+            arr[[i, 3]] = c[3];
+        }
+        Ok(arr.into_pyarray_bound(py))
+    }
+
+    /// Get bg stroke RGBAs for a specific object as numpy array.
+    pub fn get_bg_stroke_rgbas<'py>(&self, py: Python<'py>, pool_id: u32) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let idx = pool_id as usize;
+        let start = self.bg_stroke_rgba_offsets[idx] as usize;
+        let end = self.bg_stroke_rgba_offsets[idx + 1] as usize;
+        let n = end - start;
+        let mut arr = Array2::<f64>::zeros((n, 4));
+        for i in 0..n {
+            let c = &self.bg_stroke_rgbas[start + i];
+            arr[[i, 0]] = c[0];
+            arr[[i, 1]] = c[1];
+            arr[[i, 2]] = c[2];
+            arr[[i, 3]] = c[3];
+        }
+        Ok(arr.into_pyarray_bound(py))
+    }
+
+    /// Get scalar attributes for a specific object.
+    /// Returns (stroke_width, bg_stroke_width, sheen_factor, shade_in_3d).
+    pub fn get_scalars(&self, pool_id: u32) -> (f64, f64, f64, bool) {
+        let idx = pool_id as usize;
+        (
+            self.stroke_widths[idx],
+            self.bg_stroke_widths[idx],
+            self.sheen_factors[idx],
+            self.shade_in_3d[idx],
+        )
+    }
+
+    /// Get sheen direction for a specific object as numpy array.
+    pub fn get_sheen_direction<'py>(&self, py: Python<'py>, pool_id: u32) -> PyResult<Bound<'py, numpy::PyArray1<f64>>> {
+        let idx = pool_id as usize;
+        let sd = &self.sheen_directions[idx];
+        let arr = numpy::ndarray::Array1::from_vec(vec![sd[0], sd[1], sd[2]]);
+        Ok(arr.into_pyarray_bound(py))
+    }
 }

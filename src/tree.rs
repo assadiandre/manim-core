@@ -78,13 +78,22 @@ pub fn z_sort<'py>(
             continue;
         }
 
-        let mut z_sum = 0.0f64;
-        let npts = (end - start) as f64;
-        for i in start..end {
+        // Use bounding-box center to match Python's get_z_index_reference_point()
+        // which calls get_center() = (min + max) / 2
+        let mut min_xyz = pool.points[start];
+        let mut max_xyz = pool.points[start];
+        for i in (start + 1)..end {
             let p = &pool.points[i];
-            z_sum += r20 * p[0] + r21 * p[1] + r22 * p[2];
+            for j in 0..3 {
+                if p[j] < min_xyz[j] { min_xyz[j] = p[j]; }
+                if p[j] > max_xyz[j] { max_xyz[j] = p[j]; }
+            }
         }
-        z_values.push((obj_id, z_sum / npts));
+        let cx = (min_xyz[0] + max_xyz[0]) * 0.5;
+        let cy = (min_xyz[1] + max_xyz[1]) * 0.5;
+        let cz = (min_xyz[2] + max_xyz[2]) * 0.5;
+        let z = r20 * cx + r21 * cy + r22 * cz;
+        z_values.push((obj_id, z));
     }
 
     z_values.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));

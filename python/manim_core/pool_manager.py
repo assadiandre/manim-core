@@ -141,12 +141,43 @@ class PoolManager:
         pool_id = self._obj_to_id.get(id(mobject))
         if pool_id is None:
             return
+        # Points
         points = mobject.points
         if points is not None and len(points) > 0:
             try:
                 self.pool.update_points(pool_id, np.ascontiguousarray(points, dtype=np.float64))
             except (ValueError, Exception):
                 pass
+        # Colors
+        for attr, updater in [
+            ("fill_rgbas", self.pool.update_fill_rgbas),
+            ("stroke_rgbas", self.pool.update_stroke_rgbas),
+        ]:
+            arr = getattr(mobject, attr, None)
+            if arr is not None and len(arr) > 0:
+                try:
+                    updater(pool_id, np.ascontiguousarray(arr, dtype=np.float64))
+                except (ValueError, Exception):
+                    pass
+        # Scalars
+        try:
+            self.pool.update_scalars(
+                pool_id,
+                float(getattr(mobject, "stroke_width", 0.0) or 0.0),
+                float(getattr(mobject, "background_stroke_width", 0.0) or 0.0),
+                float(getattr(mobject, "sheen_factor", 0.0) or 0.0),
+                np.array(getattr(mobject, "sheen_direction", [1, 0, 0]), dtype=np.float64).flatten()[:3],
+                bool(getattr(mobject, "shade_in_3d", False)),
+            )
+        except Exception:
+            pass
+
+    def sync_all(self):
+        """Sync all registered mobjects' current state into the pool."""
+        for obj_pyid, pool_id in self._obj_to_id.items():
+            mob = self._id_to_obj.get(pool_id)
+            if mob is not None:
+                self.sync_mobject_to_pool(mob)
 
     def __enter__(self):
         self.activate()
