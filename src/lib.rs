@@ -7,6 +7,7 @@ mod tree;
 mod hashing;
 mod interpolation;
 mod rendering;
+mod batch_render;
 
 #[pymodule]
 fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -35,6 +36,9 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Phase 4: Rendering
     m.add_function(wrap_pyfunction!(rendering::prepare_render_data, m)?)?;
     m.add_function(wrap_pyfunction!(rendering::compute_visibility, m)?)?;
+
+    // Phase 5: Batch Render (tiny-skia)
+    m.add_function(wrap_pyfunction!(batch_render::batch_render, m)?)?;
 
     Ok(())
 }

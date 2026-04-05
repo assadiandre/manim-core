@@ -26,6 +26,11 @@ pub struct MeshPool {
     pub(crate) sheen_directions: Vec<[f64; 3]>,
     pub(crate) shade_in_3d: Vec<bool>,
 
+    // Rendering metadata (parallel arrays)
+    pub(crate) joint_types: Vec<u8>,   // 0=Auto, 1=Round, 2=Bevel, 3=Miter
+    pub(crate) cap_styles: Vec<u8>,    // 0=Auto, 1=Round, 2=Butt, 3=Square
+    pub(crate) tolerances: Vec<f64>,   // tolerance_for_point_equality (default 1e-6)
+
     // Tree structure (replaces recursive get_family)
     pub(crate) parent_ids: Vec<i32>, // -1 for root
     pub(crate) children: Vec<Vec<u32>>,
@@ -56,6 +61,9 @@ impl MeshPool {
             sheen_factors: Vec::new(),
             sheen_directions: Vec::new(),
             shade_in_3d: Vec::new(),
+            joint_types: Vec::new(),
+            cap_styles: Vec::new(),
+            tolerances: Vec::new(),
             parent_ids: Vec::new(),
             children: Vec::new(),
             family_order: Vec::new(),
@@ -79,6 +87,9 @@ impl MeshPool {
         sheen_factor: f64,
         sheen_direction: PyReadonlyArray1<f64>,
         shade_in_3d: bool,
+        joint_type: u8,
+        cap_style: u8,
+        tolerance: f64,
         parent_id: i32,
     ) -> PyResult<u32> {
         let pool_id = if let Some(id) = self.free_ids.pop() {
@@ -92,6 +103,9 @@ impl MeshPool {
             self.sheen_factors.push(0.0);
             self.sheen_directions.push([0.0; 3]);
             self.shade_in_3d.push(false);
+            self.joint_types.push(0);
+            self.cap_styles.push(0);
+            self.tolerances.push(1e-6);
             self.parent_ids.push(-1);
             self.children.push(Vec::new());
             // Add sentinel offsets (will be set below)
@@ -158,6 +172,9 @@ impl MeshPool {
         let sd = sheen_direction.as_array();
         self.sheen_directions[idx] = [sd[0], sd[1], sd[2]];
         self.shade_in_3d[idx] = shade_in_3d;
+        self.joint_types[idx] = joint_type;
+        self.cap_styles[idx] = cap_style;
+        self.tolerances[idx] = tolerance;
 
         // Tree
         self.parent_ids[idx] = parent_id;
@@ -239,6 +256,9 @@ impl MeshPool {
         sheen_factor: f64,
         sheen_direction: PyReadonlyArray1<f64>,
         shade_in_3d: bool,
+        joint_type: u8,
+        cap_style: u8,
+        tolerance: f64,
     ) -> PyResult<()> {
         let idx = pool_id as usize;
         self.stroke_widths[idx] = stroke_width;
@@ -247,6 +267,9 @@ impl MeshPool {
         let sd = sheen_direction.as_array();
         self.sheen_directions[idx] = [sd[0], sd[1], sd[2]];
         self.shade_in_3d[idx] = shade_in_3d;
+        self.joint_types[idx] = joint_type;
+        self.cap_styles[idx] = cap_style;
+        self.tolerances[idx] = tolerance;
         Ok(())
     }
 

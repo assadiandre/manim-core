@@ -105,6 +105,11 @@ class PoolManager:
             sheen_direction = np.array([1.0, 0.0, 0.0])
         shade_in_3d = bool(getattr(mobject, "shade_in_3d", False))
 
+        from manim.constants import LineJointType, CapStyleType
+        joint_type = int(getattr(mobject, 'joint_type', LineJointType.AUTO).value)
+        cap_style = int(getattr(mobject, 'cap_style', CapStyleType.AUTO).value)
+        tolerance = float(getattr(mobject, 'tolerance_for_point_equality', 1e-6))
+
         pool_id = self.pool.register(
             np.ascontiguousarray(points, dtype=np.float64),
             np.ascontiguousarray(fill_rgbas, dtype=np.float64),
@@ -115,6 +120,9 @@ class PoolManager:
             sheen_factor,
             sheen_direction,
             shade_in_3d,
+            joint_type,
+            cap_style,
+            tolerance,
             parent_id,
         )
 
@@ -161,6 +169,7 @@ class PoolManager:
                     pass
         # Scalars
         try:
+            from manim.constants import LineJointType, CapStyleType
             self.pool.update_scalars(
                 pool_id,
                 float(getattr(mobject, "stroke_width", 0.0) or 0.0),
@@ -168,6 +177,9 @@ class PoolManager:
                 float(getattr(mobject, "sheen_factor", 0.0) or 0.0),
                 np.array(getattr(mobject, "sheen_direction", [1, 0, 0]), dtype=np.float64).flatten()[:3],
                 bool(getattr(mobject, "shade_in_3d", False)),
+                int(getattr(mobject, 'joint_type', LineJointType.AUTO).value),
+                int(getattr(mobject, 'cap_style', CapStyleType.AUTO).value),
+                float(getattr(mobject, 'tolerance_for_point_equality', 1e-6)),
             )
         except Exception:
             pass
