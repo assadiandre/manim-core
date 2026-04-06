@@ -41,6 +41,7 @@ class PoolManager:
         self.pool = MeshPool()
         self._obj_to_id = {}   # id(VMobject) -> pool_id
         self._id_to_obj = {}   # pool_id -> VMobject
+        self._dirty = set()    # set of id(VMobject) that need sync
 
     def activate(self):
         set_scene_pool(self.pool)
@@ -52,6 +53,28 @@ class PoolManager:
 
     def is_registered(self, mobject):
         return id(mobject) in self._obj_to_id
+
+    def mark_dirty(self, mobject):
+        """Mark a mobject as needing sync to pool next frame."""
+        obj_key = id(mobject)
+        if obj_key in self._obj_to_id:
+            self._dirty.add(obj_key)
+
+    def unregister(self, mobject):
+        """Remove a mobject from the pool manager tracking."""
+        obj_key = id(mobject)
+        pool_id = self._obj_to_id.pop(obj_key, None)
+        if pool_id is not None:
+            self._id_to_obj.pop(pool_id, None)
+            self._dirty.discard(obj_key)
+            if hasattr(mobject, '_pool_id'):
+                del mobject._pool_id
+
+    def unregister_family(self, mobject):
+        """Remove a mobject and all its submobjects from pool manager tracking."""
+        self.unregister(mobject)
+        for sub in mobject.submobjects:
+            self.unregister_family(sub)
 
     def register_mobject(self, mobject, parent_id=-1):
         """Register a VMobject and all its submobjects into the pool."""
@@ -145,6 +168,13 @@ class PoolManager:
             return self._obj_to_id[id(mobject)]
         return self.register_mobject(mobject)
 
+    @staticmethod
+    def _ensure_contiguous(arr):
+        """Return a C-contiguous float64 array, avoiding copy if already correct."""
+        if arr.flags['C_CONTIGUOUS'] and arr.dtype == np.float64:
+            return arr
+        return np.ascontiguousarray(arr, dtype=np.float64)
+
     def sync_mobject_to_pool(self, mobject):
         pool_id = self._obj_to_id.get(id(mobject))
         if pool_id is None:
@@ -153,7 +183,7 @@ class PoolManager:
         points = mobject.points
         if points is not None and len(points) > 0:
             try:
-                self.pool.update_points(pool_id, np.ascontiguousarray(points, dtype=np.float64))
+                self.pool.update_points(pool_id, self._ensure_contiguous(points))
             except (ValueError, Exception):
                 pass
         # Colors
@@ -164,7 +194,7 @@ class PoolManager:
             arr = getattr(mobject, attr, None)
             if arr is not None and len(arr) > 0:
                 try:
-                    updater(pool_id, np.ascontiguousarray(arr, dtype=np.float64))
+                    updater(pool_id, self._ensure_contiguous(arr))
                 except (ValueError, Exception):
                     pass
         # Scalars
@@ -185,8 +215,15 @@ class PoolManager:
             pass
 
     def sync_all(self):
-        """Sync all registered mobjects' current state into the pool."""
-        for obj_pyid, pool_id in self._obj_to_id.items():
+        """Sync only dirty mobjects' current state into the pool."""
+        if not self._dirty:
+            return
+        dirty = self._dirty
+        self._dirty = set()
+        for obj_pyid in dirty:
+            pool_id = self._obj_to_id.get(obj_pyid)
+            if pool_id is None:
+                continue
             mob = self._id_to_obj.get(pool_id)
             if mob is not None:
                 self.sync_mobject_to_pool(mob)

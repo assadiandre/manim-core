@@ -55,26 +55,16 @@ def patch_rendering():
             self.cairo_line_width_multiple,
         )
 
-    def _is_batchable(vm, pm, pool, fixed_in_frame, fixed_orientation):
-        """Check if a VMobject can be rendered via the Rust batch path.
-
-        Returns False for:
-        - Objects without a pool_id
-        - Fixed-in-frame / fixed-orientation objects (need special transforms)
-        - Animation intermediates (deepcopy clones whose id() isn't in the pool
-          manager, meaning their points/colors may differ from the pool)
-        - Objects whose point count differs from the pool (animations like
-          Create use pointwise_become_partial which changes point count;
-          sync_all silently fails for these, leaving stale data in the pool)
-        """
-        if not hasattr(vm, '_pool_id'):
+    def _is_batchable(vm, pm_obj_to_id, pool, fixed_in_frame, fixed_orientation):
+        """Check if a VMobject can be rendered via the Rust batch path."""
+        pid = getattr(vm, '_pool_id', None)
+        if pid is None:
             return False
         if vm in fixed_in_frame or vm in fixed_orientation:
             return False
-        if id(vm) not in pm._obj_to_id:
+        if id(vm) not in pm_obj_to_id:
             return False
         # Point count mismatch → pool has stale geometry (sync failed)
-        pid = vm._pool_id
         pts = vm.points
         if pts is not None:
             start, end = pool.point_range(pid)
@@ -93,27 +83,39 @@ def patch_rendering():
         try:
             fixed_in_frame = getattr(self, 'fixed_in_frame_mobjects', set())
             fixed_orientation = getattr(self, 'fixed_orientation_mobjects', {})
+            pm_obj_to_id = pm._obj_to_id
 
-            # Walk objects in order, batching consecutive pool-eligible objects
-            # and flushing when a fallback object is encountered.  This
-            # preserves the painter's-algorithm z-order.
+            # Fast path: if all objects are batchable, skip per-object checks
+            # and build the pool_id array directly
+            all_batch_ids = []
+            has_fallback = False
+            for vm in vmobjects:
+                if _is_batchable(vm, pm_obj_to_id, pool, fixed_in_frame, fixed_orientation):
+                    all_batch_ids.append(vm._pool_id)
+                else:
+                    has_fallback = True
+                    break
+
+            if not has_fallback:
+                # All batchable — single Rust call, no interleaving needed
+                _flush_batch(self, pixel_array, pool, all_batch_ids)
+                return
+
+            # Slow path: interleaved batching with Python fallback
             current_batch = []
-            ctx = None  # lazy-init skia canvas only if needed
+            ctx = None
 
             for vm in vmobjects:
-                if _is_batchable(vm, pm, pool, fixed_in_frame, fixed_orientation):
+                if _is_batchable(vm, pm_obj_to_id, pool, fixed_in_frame, fixed_orientation):
                     current_batch.append(vm._pool_id)
                 else:
-                    # Flush any pending batch before drawing the fallback object
                     if current_batch:
                         _flush_batch(self, pixel_array, pool, current_batch)
                         current_batch = []
-                    # Render fallback object via Python/skia-python
                     if ctx is None:
                         ctx = self.get_skia_canvas(pixel_array)
                     self.display_vectorized(vm, ctx)
 
-            # Flush remaining batch
             if current_batch:
                 _flush_batch(self, pixel_array, pool, current_batch)
 

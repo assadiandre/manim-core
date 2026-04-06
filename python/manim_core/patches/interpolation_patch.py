@@ -24,29 +24,50 @@ def patch_interpolation():
                 and hasattr(self, '_pool_id')
                 and hasattr(mobject1, '_pool_id')
                 and hasattr(mobject2, '_pool_id')):
-            try:
-                interpolate_object_attrs(
-                    pool,
-                    self._pool_id,
-                    mobject1._pool_id,
-                    mobject2._pool_id,
-                    alpha,
-                )
-                pid = self._pool_id
+            pid = self._pool_id
+            pid1 = mobject1._pool_id
+            pid2 = mobject2._pool_id
 
-                # Read back interpolated values from pool to Python mobject
-                self.fill_rgbas = np.array(pool.get_fill_rgbas(pid))
-                self.stroke_rgbas = np.array(pool.get_stroke_rgbas(pid))
-                self.background_stroke_rgbas = np.array(pool.get_bg_stroke_rgbas(pid))
+            # Verify all three objects are the actual registered objects
+            # (not copies that inherited stale _pool_id)
+            if (pm._id_to_obj.get(pid) is self
+                    and pm._id_to_obj.get(pid1) is mobject1
+                    and pm._id_to_obj.get(pid2) is mobject2):
 
-                sw, bsw, sf, s3d = pool.get_scalars(pid)
-                self.stroke_width = sw
-                self.background_stroke_width = bsw
-                self.sheen_factor = sf
-                self.sheen_direction = np.array(pool.get_sheen_direction(pid))
-                return
-            except Exception:
-                pass
+                # Verify color array sizes match between all three objects.
+                # Rust uses min(sizes) which skips entries; Python broadcasts.
+                # Only use Rust path when sizes are identical.
+                try:
+                    tf = pool.fill_rgba_range(pid)
+                    s1f = pool.fill_rgba_range(pid1)
+                    s2f = pool.fill_rgba_range(pid2)
+                    ts = pool.stroke_rgba_range(pid)
+                    s1s = pool.stroke_rgba_range(pid1)
+                    s2s = pool.stroke_rgba_range(pid2)
+                    tb = pool.bg_stroke_rgba_range(pid)
+                    s1b = pool.bg_stroke_rgba_range(pid1)
+                    s2b = pool.bg_stroke_rgba_range(pid2)
+                    fill_ok = (tf[1] - tf[0]) == (s1f[1] - s1f[0]) == (s2f[1] - s2f[0])
+                    stroke_ok = (ts[1] - ts[0]) == (s1s[1] - s1s[0]) == (s2s[1] - s2s[0])
+                    bg_ok = (tb[1] - tb[0]) == (s1b[1] - s1b[0]) == (s2b[1] - s2b[0])
+
+                    if fill_ok and stroke_ok and bg_ok:
+                        interpolate_object_attrs(pool, pid, pid1, pid2, alpha)
+
+                        # Read back interpolated values from pool to Python mobject
+                        self.fill_rgbas = np.array(pool.get_fill_rgbas(pid))
+                        self.stroke_rgbas = np.array(pool.get_stroke_rgbas(pid))
+                        self.background_stroke_rgbas = np.array(pool.get_bg_stroke_rgbas(pid))
+
+                        sw, bsw, sf, s3d = pool.get_scalars(pid)
+                        self.stroke_width = sw
+                        self.background_stroke_width = bsw
+                        self.sheen_factor = sf
+                        self.sheen_direction = np.array(pool.get_sheen_direction(pid))
+                        pm.mark_dirty(self)
+                        return
+                except Exception:
+                    pass
 
         return _orig_interpolate_color(self, mobject1, mobject2, alpha)
 

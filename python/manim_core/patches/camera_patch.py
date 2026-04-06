@@ -3,7 +3,8 @@ Monkey-patches for ThreeDCamera.
 
 Key optimizations:
   - transform_points_pre_display: uses batch-projected points from pool
-  - get_mobjects_to_display: replaces recursive get_family + z-sort with pool ops
+  - get_mobjects_to_display: calls Camera base (skips ThreeDCamera Python z-sort),
+    then applies Rust z_sort
 """
 import numpy as np
 
@@ -17,12 +18,15 @@ from manim_core.pool_manager import get_scene_pool, get_pool_manager
 
 def patch_three_d_camera():
     from manim.camera.three_d_camera import ThreeDCamera
+    from manim.camera.camera import Camera as _CameraBase
 
     _orig_get_mobjects_to_display = ThreeDCamera.get_mobjects_to_display
     _orig_transform = ThreeDCamera.transform_points_pre_display
+    # Grandparent method: does family extraction + z_index sort, but NOT 3D z-sort
+    _camera_base_get_mobjects = _CameraBase.get_mobjects_to_display
 
     def _patched_get_mobjects_to_display(self, *args, **kwargs):
-        """Replace z-sort with Rust pool-based sort."""
+        """Skip ThreeDCamera's Python z-sort, use Rust z_sort instead."""
         pool = get_scene_pool()
         pm = get_pool_manager()
 
@@ -35,10 +39,11 @@ def patch_three_d_camera():
                 for mob in args[0]:
                     pm.ensure_registered(mob)
 
-            # Get the base list from parent (family extraction + z_index sorting)
-            base_result = _orig_get_mobjects_to_display(self, *args, **kwargs)
+            # Call Camera base directly — skips ThreeDCamera's expensive Python
+            # sorted() + z_key which calls get_center() on every mobject
+            base_result = _camera_base_get_mobjects(self, *args, **kwargs)
 
-            rot_matrix = np.ascontiguousarray(self.get_rotation_matrix(), dtype=np.float64)
+            rot_matrix = self._frame_rot_matrix
 
             # Separate pool-backed 3D objects and others
             pool_3d = []
@@ -99,7 +104,9 @@ def patch_three_d_camera():
             return
         try:
             fc = np.ascontiguousarray(self.frame_center, dtype=np.float64)
-            rot = np.ascontiguousarray(self.get_rotation_matrix(), dtype=np.float64)
+            rot = getattr(self, '_frame_rot_matrix', None)
+            if rot is None:
+                rot = np.ascontiguousarray(self.get_rotation_matrix(), dtype=np.float64)
             fd = float(self.get_focal_distance())
             zoom = float(self.get_zoom())
             exp_proj = bool(getattr(self, 'exponential_projection', True))
@@ -136,12 +143,23 @@ def patch_three_d_camera():
     _orig_capture = Camera.capture_mobjects
 
     def _patched_capture(self, mobjects, **kwargs):
-        if isinstance(self, ThreeDCamera):
-            pm = get_pool_manager()
-            if pm is not None:
-                pm.sync_all()
-            _batch_precompute(self)
-            _batch_shade(self)
+        if not getattr(self, '_in_capture', False):
+            self._in_capture = True
+            try:
+                # Always sync dirty mobjects to pool before rendering
+                pm = get_pool_manager()
+                if pm is not None:
+                    pm.sync_all()
+
+                # 3D-specific: projection and shading precomputation
+                if isinstance(self, ThreeDCamera):
+                    self._frame_rot_matrix = np.ascontiguousarray(
+                        self.get_rotation_matrix(), dtype=np.float64
+                    )
+                    _batch_precompute(self)
+                    _batch_shade(self)
+            finally:
+                self._in_capture = False
         return _orig_capture(self, mobjects, **kwargs)
 
     ThreeDCamera.get_mobjects_to_display = _patched_get_mobjects_to_display
